@@ -3,38 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Sci-Hunter: แผนที่จับไอเทม</title>
+    <title>Sci-Hunter: ภารกิจวันวิทยาศาสตร์</title>
     
-    <!-- นำเข้า Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- นำเข้า Leaflet.js (CSS และ JS) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        /* ล็อกไม่ให้หน้าจอเลื่อนได้ เพื่อให้เหมือนแอปมือถือ */
         body { margin: 0; padding: 0; overflow: hidden; }
         #map { width: 100vw; height: 100vh; z-index: 1; }
         .ui-layer { z-index: 1000; pointer-events: none; }
         .pointer-events-auto { pointer-events: auto; }
+        .login-layer { z-index: 2000; }
     </style>
 </head>
 <body class="relative bg-gray-900 text-white font-sans">
 
-    <!-- ส่วนแสดงแผนที่ -->
+    <!-- 1. หน้าจอ Login -->
+    <div id="loginScreen" class="login-layer absolute inset-0 bg-gray-900 flex flex-col justify-center items-center px-6">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
+            <h1 class="text-3xl font-bold text-blue-600 mb-2">Sci-Hunter</h1>
+            <p class="text-gray-600 mb-6">ภารกิจวันวิทยาศาสตร์แห่งชาติ</p>
+            
+            <input type="text" id="studentIdInput" placeholder="กรอกรหัสนักเรียนของคุณ" 
+                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none mb-4 text-center text-lg font-semibold text-gray-800">
+                   
+            <button id="loginBtn" onclick="loginUser()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition">
+                เข้าสู่ระบบ / เริ่มเกม
+            </button>
+            <p id="loginError" class="text-red-500 mt-3 text-sm hidden"></p>
+        </div>
+    </div>
+
+    <!-- 2. ส่วนแสดงแผนที่ -->
     <div id="map"></div>
 
-    <!-- UI ด้านบน: แถบสถานะ -->
-    <div class="ui-layer absolute top-4 left-0 w-full px-4 flex justify-between items-start">
+    <!-- 3. UI แจ้งสถานะด้านบน -->
+    <div id="gameUI" class="hidden ui-layer absolute top-4 left-0 w-full px-4 flex justify-between items-start">
         <div class="bg-white/90 text-gray-800 p-3 rounded-xl shadow-lg w-full border-l-4 border-blue-500">
-            <h1 class="font-bold text-lg">ภารกิจ: ตามหา H2O</h1>
-            <p id="statusText" class="text-sm text-gray-600 mt-1">กำลังค้นหาสัญญาณ GPS...</p>
+            <h1 class="font-bold text-lg">ผู้เล่น: <span id="playerNameDisplay" class="text-blue-600"></span></h1>
+            <p id="statusText" class="text-sm text-gray-600 mt-1">กำลังเตรียมระบบแผนที่และ GPS...</p>
             <p id="accuracyText" class="text-xs text-red-500 mt-1"></p>
         </div>
     </div>
 
-    <!-- UI ด้านล่าง: ปุ่มกดจับ (จะโผล่มาเมื่ออยู่ใกล้) -->
+    <!-- 4. ปุ่มจับ (จะโผล่เมื่ออยู่ใกล้) -->
     <div class="ui-layer absolute bottom-10 left-0 w-full px-4 flex justify-center">
         <button id="catchBtn" onclick="startCatchSequence()" 
                 class="hidden pointer-events-auto bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-4 px-12 rounded-full shadow-xl transform transition hover:scale-105 border-4 border-white animate-bounce">
@@ -43,127 +56,183 @@
     </div>
 
     <script>
-    // 1. ตั้งค่าแผนที่เริ่มต้น
-    const map = L.map('map', { zoomControl: false }).setView([13.736717, 100.523186], 18);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        // === นำ Web App URL ของ Google Apps Script มาใส่ตรงนี้ ===
+        const API_URL = "https://script.google.com/macros/s/AKfycbwuvzSAwabFi8DlT_MFzAq0rrWT_dMAOCEbJSJB_OsfZPqn9IL1L6Zy2E1JNjkIh9rxkg/exec"; 
+        
+        let map;
+        let playerMarker;
+        let circleAccuracy;
+        let itemsList = []; 
+        let currentTarget = null;
+        let gpsWatchId;
 
-    let playerMarker;
-    let circleAccuracy;
-    let itemsList = []; // เก็บรายการมอนสเตอร์ทั้งหมดที่ดึงมาจาก API
-
-    // นำ URL ที่ได้จากการ Deploy Apps Script มาใส่ตรงนี้
-    const API_URL = "https://script.google.com/macros/s/AKfycbwuvzSAwabFi8DlT_MFzAq0rrWT_dMAOCEbJSJB_OsfZPqn9IL1L6Zy2E1JNjkIh9rxkg/exec"; 
-
-    // ฟังก์ชันคำนวณระยะทาง Haversine Formula (ส่งค่ากลับเป็น เมตร)
-    function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3; 
-        const p1 = lat1 * Math.PI/180;
-        const p2 = lat2 * Math.PI/180;
-        const dp = (lat2-lat1) * Math.PI/180;
-        const dl = (lon2-lon1) * Math.PI/180;
-        const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
-
-    // 2. ดึงข้อมูลพิกัดไอเทมจาก Google Apps Script API
-    fetch(API_URL)
-        .then(response => response.json())
-        .then(data => {
-            itemsList = data; // เก็บข้อมูลลงตัวแปร
-
-            // วนลูปสร้างมอนสเตอร์บนแผนที่ตามข้อมูลที่ดึงมา
-            itemsList.forEach(item => {
-                const icon = L.icon({
-                    iconUrl: item.iconUrl,
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 40]
-                });
-
-                L.marker([item.lat, item.lng], {icon: icon})
-                 .addTo(map)
-                 .bindPopup(`<b>${item.name}</b><br>ระดับ: ${item.type}`);
-            });
-            
-            // เมื่อดึงข้อมูลเสร็จ เริ่มระบบติดตาม GPS
-            startGPS(); 
-        })
-        .catch(error => {
-            console.error("Error fetching data:", error);
-            document.getElementById('statusText').innerText = "เกิดข้อผิดพลาดในการโหลดข้อมูลไอเทม";
-        });
-
-    // 3. ระบบติดตาม GPS แบบ Real-time
-    function startGPS() {
-        if ('geolocation' in navigator) {
-            navigator.geolocation.watchPosition(
-                function(position) {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    const accuracy = position.coords.accuracy;
-
-                    document.getElementById('accuracyText').innerText = `ความแม่นยำ GPS: ±${Math.floor(accuracy)} เมตร`;
-
-                    // อัปเดตตำแหน่งผู้เล่น
-                    if (!playerMarker) {
-                        playerMarker = L.marker([lat, lng]).addTo(map).bindPopup("คุณอยู่ที่นี่");
-                        circleAccuracy = L.circle([lat, lng], { radius: accuracy, color: '#3b82f6', fillOpacity: 0.2 }).addTo(map);
-                        map.setView([lat, lng], 19);
-                    } else {
-                        playerMarker.setLatLng([lat, lng]);
-                        circleAccuracy.setLatLng([lat, lng]);
-                        circleAccuracy.setRadius(accuracy);
-                    }
-
-                    // เช็คระยะทางของไอเทมทั้งหมด เพื่อเปิดปุ่ม "จับ"
-                    checkProximity(lat, lng);
-                },
-                function(error) {
-                    document.getElementById('statusText').innerText = "กรุณาเปิด GPS (Location Services)";
-                },
-                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-            );
-        }
-    }
-
-    // 4. ตรวจสอบระยะห่างกับไอเทมทั้งหมด
-    let currentTarget = null; // เก็บไอเทมตัวที่อยู่ใกล้ที่สุด
-
-    function checkProximity(playerLat, playerLng) {
-        let closestDistance = Infinity;
-        currentTarget = null;
-
-        itemsList.forEach(item => {
-            const distance = getDistance(playerLat, playerLng, item.lat, item.lng);
-            
-            // หาตัวที่ใกล้ที่สุด และต้องอยู่ในระยะรัศมี (radius) ที่กำหนดใน Google Sheets
-            if (distance <= item.radius && distance < closestDistance) {
-                closestDistance = distance;
-                currentTarget = item;
+        // ตรวจสอบสถานะการล็อคอินเมื่อเปิดเว็บ
+        window.onload = () => {
+            const savedId = localStorage.getItem("sciHunter_studentId");
+            const savedName = localStorage.getItem("sciHunter_studentName");
+            if (savedId && savedName) {
+                startGame(savedName);
             }
-        });
+        };
 
-        const catchBtn = document.getElementById('catchBtn');
-        const statusText = document.getElementById('statusText');
+        // --- ระบบล็อคอิน ---
+        function loginUser() {
+            const studentId = document.getElementById('studentIdInput').value.trim();
+            const errorText = document.getElementById('loginError');
+            const loginBtn = document.getElementById('loginBtn');
+            
+            if (!studentId) {
+                showError("กรุณากรอกรหัสนักเรียน");
+                return;
+            }
 
-        if (currentTarget) {
-            statusText.innerHTML = `<span class="text-green-600 font-bold">เจอ ${currentTarget.name}! (${Math.floor(closestDistance)} เมตร)</span>`;
-            catchBtn.classList.remove('hidden'); // แสดงปุ่ม
-        } else {
-            statusText.innerText = `กำลังค้นหาสัญญาณ... (เดินเข้าหาจุดบนแผนที่)`;
-            catchBtn.classList.add('hidden'); // ซ่อนปุ่ม
+            errorText.classList.add('hidden');
+            loginBtn.innerText = "กำลังตรวจสอบ...";
+            loginBtn.disabled = true;
+            
+            fetch(`${API_URL}?action=login&id=${studentId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        localStorage.setItem("sciHunter_studentId", studentId);
+                        localStorage.setItem("sciHunter_studentName", data.name);
+                        startGame(data.name);
+                    } else {
+                        showError(data.message);
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    showError("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
+                })
+                .finally(() => {
+                    loginBtn.innerText = "เข้าสู่ระบบ / เริ่มเกม";
+                    loginBtn.disabled = false;
+                });
         }
-    }
 
-    // 5. เมื่อกดปุ่มสแกนจับ
-    function startCatchSequence() {
-        if (currentTarget) {
-             alert(`เริ่มการจับ: ${currentTarget.name}\nความยาก: ${currentTarget.type}`);
-             // ตรงนี้สามารถซ่อนแผนที่ (document.getElementById('map').style.display = 'none';)
-             // แล้วแสดง div ส่วนที่เป็นคำถามได้ครับ
+        function showError(msg) {
+            const errorText = document.getElementById('loginError');
+            errorText.innerText = msg;
+            errorText.classList.remove('hidden');
         }
-    }
-</script>
 
+        // --- เริ่มเกม (โหลดแผนที่และข้อมูล) ---
+        function startGame(playerName) {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('gameUI').classList.remove('hidden');
+            document.getElementById('playerNameDisplay').innerText = playerName;
+
+            // สร้างแผนที่ (หากยังไม่ได้สร้าง)
+            if (!map) {
+                map = L.map('map', { zoomControl: false }).setView([13.736717, 100.523186], 18);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            }
+            
+            // ทำให้ Leaflet วาดแผนที่ใหม่สมบูรณ์เมื่อซ่อนหน้าล็อคอิน
+            setTimeout(() => { map.invalidateSize(); }, 100);
+
+            // ดึงข้อมูลไอเทม
+            document.getElementById('statusText').innerText = "กำลังดึงข้อมูลมอนสเตอร์...";
+            fetch(`${API_URL}?action=getItems`)
+                .then(res => res.json())
+                .then(data => {
+                    itemsList = data;
+                    // วาดมอนสเตอร์ลงบนแผนที่
+                    itemsList.forEach(item => {
+                        const icon = L.icon({
+                            iconUrl: item.iconUrl,
+                            iconSize: [40, 40],
+                            iconAnchor: [20, 40]
+                        });
+                        L.marker([item.lat, item.lng], {icon: icon})
+                         .addTo(map)
+                         .bindPopup(`<b>${item.name}</b><br>ระดับ: ${item.type}`);
+                    });
+                    
+                    document.getElementById('statusText').innerText = "กำลังค้นหาสัญญาณ GPS...";
+                    startGPS(); 
+                })
+                .catch(err => {
+                    console.error(err);
+                    document.getElementById('statusText').innerText = "เกิดข้อผิดพลาดในการดึงข้อมูล";
+                });
+        }
+
+        // --- ระบบระยะทาง (Haversine Formula) ---
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; 
+            const p1 = lat1 * Math.PI/180;
+            const p2 = lat2 * Math.PI/180;
+            const dp = (lat2-lat1) * Math.PI/180;
+            const dl = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        // --- ระบบ GPS ---
+        function startGPS() {
+            if ('geolocation' in navigator) {
+                gpsWatchId = navigator.geolocation.watchPosition(
+                    function(position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const accuracy = position.coords.accuracy;
+
+                        document.getElementById('accuracyText').innerText = `ความแม่นยำ GPS: ±${Math.floor(accuracy)} เมตร`;
+
+                        if (!playerMarker) {
+                            playerMarker = L.marker([lat, lng]).addTo(map).bindPopup("คุณอยู่ที่นี่");
+                            circleAccuracy = L.circle([lat, lng], { radius: accuracy, color: '#3b82f6', fillOpacity: 0.2 }).addTo(map);
+                            map.setView([lat, lng], 19);
+                        } else {
+                            playerMarker.setLatLng([lat, lng]);
+                            circleAccuracy.setLatLng([lat, lng]);
+                            circleAccuracy.setRadius(accuracy);
+                        }
+
+                        checkProximity(lat, lng);
+                    },
+                    function(error) {
+                        document.getElementById('statusText').innerText = "กรุณาเปิด GPS (Location Services)";
+                    },
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            }
+        }
+
+        // --- ตรวจสอบระยะห่างกับไอเทม ---
+        function checkProximity(playerLat, playerLng) {
+            let closestDistance = Infinity;
+            currentTarget = null;
+
+            itemsList.forEach(item => {
+                const distance = getDistance(playerLat, playerLng, item.lat, item.lng);
+                if (distance <= item.radius && distance < closestDistance) {
+                    closestDistance = distance;
+                    currentTarget = item;
+                }
+            });
+
+            const catchBtn = document.getElementById('catchBtn');
+            const statusText = document.getElementById('statusText');
+
+            if (currentTarget) {
+                statusText.innerHTML = `<span class="text-green-600 font-bold">พบ ${currentTarget.name}! (${Math.floor(closestDistance)} เมตร)</span>`;
+                catchBtn.classList.remove('hidden');
+            } else {
+                statusText.innerText = `ออกสำรวจเพื่อค้นหาไอเทม (เดินตามแผนที่)`;
+                catchBtn.classList.add('hidden');
+            }
+        }
+
+        // --- เริ่มต้นการจับมอนสเตอร์ ---
+        function startCatchSequence() {
+            if (currentTarget) {
+                // สำหรับพัฒนาต่อ: สร้างหน้าต่างซ้อนขึ้นมาแสดงคำถามตรงนี้
+                alert(`คุณกำลังพยายามจับ: ${currentTarget.name}\n(ระบบคำถามจะเพิ่มในส่วนนี้)`);
+            }
+        }
+    </script>
 </body>
 </html>
