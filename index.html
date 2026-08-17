@@ -3,79 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Sci-Hunter: ภารกิจวันวิทยาศาสตร์</title>
+    <title>Sci-Hunter: โหมด AR เปิดกล้อง</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; }
-        #map { width: 100vw; height: 100vh; z-index: 1; }
-        .ui-layer { z-index: 1000; pointer-events: none; }
+        body { margin: 0; overflow: hidden; }
+        .ui-layer { z-index: 9999; position: absolute; }
         .pointer-events-auto { pointer-events: auto; }
-        .login-layer { z-index: 2000; }
+        /* พื้นหลังหน้าต่างคำถาม */
+        .modal-bg { background-color: rgba(0, 0, 0, 0.8); backdrop-filter: blur(5px); }
     </style>
 </head>
-<body class="relative bg-gray-900 text-white font-sans">
+<body style="margin: 0; overflow: hidden;" class="font-sans text-white">
 
     <!-- 1. หน้าจอ Login -->
-    <div id="loginScreen" class="login-layer absolute inset-0 bg-gray-900 flex flex-col justify-center items-center px-6">
-        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
-            <h1 class="text-3xl font-bold text-blue-600 mb-2">Sci-Hunter</h1>
-            <p class="text-gray-600 mb-6">ภารกิจวันวิทยาศาสตร์แห่งชาติ</p>
+    <div id="loginScreen" class="ui-layer inset-0 bg-gray-900 w-full h-full flex flex-col justify-center items-center px-6">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center pointer-events-auto">
+            <h1 class="text-3xl font-bold text-blue-600 mb-2">Sci-Hunter AR</h1>
+            <p class="text-gray-600 mb-6">ภารกิจตามล่าไอเทมวิทยาศาสตร์</p>
             
-            <input type="text" id="studentIdInput" placeholder="กรอกรหัสนักเรียนของคุณ" 
-                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none mb-4 text-center text-lg font-semibold text-gray-800">
+            <input type="text" id="studentIdInput" placeholder="กรอกรหัสนักเรียน" 
+                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 text-gray-800 text-center mb-4">
                    
-            <button id="loginBtn" onclick="loginUser()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition">
-                เข้าสู่ระบบ / เริ่มเกม
+            <button id="loginBtn" onclick="loginUser()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">
+                เข้าสู่ระบบ / เปิดกล้อง
             </button>
             <p id="loginError" class="text-red-500 mt-3 text-sm hidden"></p>
         </div>
     </div>
 
-    <!-- 2. ส่วนแสดงแผนที่ -->
-    <div id="map"></div>
-
-    <!-- 3. UI แจ้งสถานะด้านบน -->
-    <div id="gameUI" class="hidden ui-layer absolute top-4 left-0 w-full px-4 flex justify-between items-start">
-        <div class="bg-white/90 text-gray-800 p-3 rounded-xl shadow-lg w-full border-l-4 border-blue-500">
-            <h1 class="font-bold text-lg">ผู้เล่น: <span id="playerNameDisplay" class="text-blue-600"></span></h1>
-            <p id="statusText" class="text-sm text-gray-600 mt-1">กำลังเตรียมระบบแผนที่และ GPS...</p>
-            <p id="accuracyText" class="text-xs text-red-500 mt-1"></p>
+    <!-- 2. UI ด้านบน -->
+    <div id="gameUI" class="hidden ui-layer top-4 left-0 w-full px-4 flex justify-between items-start pointer-events-none">
+        <div class="bg-white/90 text-gray-800 p-3 rounded-xl shadow-lg w-full border-l-4 border-blue-500 pointer-events-auto">
+            <h1 class="font-bold text-lg">นักวิจัย: <span id="playerNameDisplay" class="text-blue-600"></span></h1>
+            <p id="statusText" class="text-sm text-gray-600 mt-1">หันกล้องหาไอเทม แล้วแตะที่รูปเพื่อจับ!</p>
         </div>
     </div>
 
-    <!-- 4. ปุ่มจับ (จะโผล่เมื่ออยู่ใกล้) -->
-    <div class="ui-layer absolute bottom-10 left-0 w-full px-4 flex justify-center">
-        <button id="catchBtn" onclick="startCatchSequence()" 
-                class="hidden pointer-events-auto bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-4 px-12 rounded-full shadow-xl transform transition hover:scale-105 border-4 border-white animate-bounce">
-            🔍 กดสแกนจับไอเทม!
-        </button>
+    <!-- 🌟 3. หน้าต่างคำถาม (Pop-up Modal) 🌟 -->
+    <div id="questionModal" class="hidden ui-layer inset-0 modal-bg w-full h-full flex flex-col justify-center items-center px-4 pointer-events-auto">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md text-center border-t-8 border-indigo-500">
+            <h2 id="qTitle" class="text-2xl font-bold text-indigo-600 mb-2">พบไอเทม!</h2>
+            <p id="qText" class="text-gray-700 text-lg mb-6 font-medium">คำถามจะปรากฏที่นี่?</p>
+            
+            <!-- ปุ่มตัวเลือก 3 ข้อ -->
+            <div class="space-y-3">
+                <button onclick="checkAnswer(1)" id="btnChoice1" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 border border-blue-300 rounded-xl transition"></button>
+                <button onclick="checkAnswer(2)" id="btnChoice2" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 border border-blue-300 rounded-xl transition"></button>
+                <button onclick="checkAnswer(3)" id="btnChoice3" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 border border-blue-300 rounded-xl transition"></button>
+            </div>
+            
+            <!-- ปุ่มปิดหน้าต่าง (กรณีไม่อยากตอบ) -->
+            <button onclick="closeQuestionModal()" class="mt-6 text-gray-400 hover:text-gray-600 underline text-sm">
+                หนีไปตั้งหลักก่อน
+            </button>
+        </div>
+    </div>
+
+    <!-- 4. ระบบกล้อง AR -->
+    <div id="ar-container" style="display: none;">
+        <a-scene
+            vr-mode-ui="enabled: false"
+            embedded
+            arjs="sourceType: webcam; debugUIEnabled: false;"
+            cursor="rayOrigin: mouse"
+            raycaster="objects: .clickable">
+            
+            <a-camera gps-camera rotation-reader>
+                <a-cursor color="#3b82f6" scale="1.5 1.5 1.5"></a-cursor>
+            </a-camera>
+        </a-scene>
     </div>
 
     <script>
-        // === นำ Web App URL ของ Google Apps Script มาใส่ตรงนี้ ===
-        const API_URL = "https://script.google.com/macros/s/AKfycbwuvzSAwabFi8DlT_MFzAq0rrWT_dMAOCEbJSJB_OsfZPqn9IL1L6Zy2E1JNjkIh9rxkg/exec"; 
-        
-        let map;
-        let playerMarker;
-        let circleAccuracy;
-        let itemsList = []; 
-        let currentTarget = null;
-        let gpsWatchId;
+        // ==========================================
+        const API_URL = "https://script.google.com/macros/s/AKfycbwuvzSAwabFi8DlT_MFzAq0rrWT_dMAOCEbJSJB_OsfZPqn9IL1L6Zy2E1JNjkIh9rxkg/exec"; // 🔴 เปลี่ยนลิงก์ API ด้วยนะครับ
+        // ==========================================
 
-        // ตรวจสอบสถานะการล็อคอินเมื่อเปิดเว็บ
-        window.onload = () => {
-            const savedId = localStorage.getItem("sciHunter_studentId");
-            const savedName = localStorage.getItem("sciHunter_studentName");
-            if (savedId && savedName) {
-                startGame(savedName);
-            }
-        };
+        // ตัวแปรเก็บข้อมูลคำถามปัจจุบัน
+        let currentTargetEntity = null;
+        let currentCorrectAnswer = null;
 
-        // --- ระบบล็อคอิน ---
         function loginUser() {
             const studentId = document.getElementById('studentIdInput').value.trim();
             const errorText = document.getElementById('loginError');
@@ -87,26 +99,23 @@
             }
 
             errorText.classList.add('hidden');
-            loginBtn.innerText = "กำลังตรวจสอบ...";
+            loginBtn.innerText = "กำลังเชื่อมต่อ...";
             loginBtn.disabled = true;
             
             fetch(`${API_URL}?action=login&id=${studentId}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
-                        localStorage.setItem("sciHunter_studentId", studentId);
-                        localStorage.setItem("sciHunter_studentName", data.name);
                         startGame(data.name);
                     } else {
                         showError(data.message);
+                        loginBtn.innerText = "เข้าสู่ระบบ / เปิดกล้อง";
+                        loginBtn.disabled = false;
                     }
                 })
                 .catch(err => {
-                    console.error(err);
-                    showError("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
-                })
-                .finally(() => {
-                    loginBtn.innerText = "เข้าสู่ระบบ / เริ่มเกม";
+                    showError("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+                    loginBtn.innerText = "เข้าสู่ระบบ / เปิดกล้อง";
                     loginBtn.disabled = false;
                 });
         }
@@ -117,120 +126,75 @@
             errorText.classList.remove('hidden');
         }
 
-        // --- เริ่มเกม (โหลดแผนที่และข้อมูล) ---
         function startGame(playerName) {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('gameUI').classList.remove('hidden');
+            document.getElementById('ar-container').style.display = 'block';
             document.getElementById('playerNameDisplay').innerText = playerName;
 
-            // สร้างแผนที่ (หากยังไม่ได้สร้าง)
-            if (!map) {
-                map = L.map('map', { zoomControl: false }).setView([13.736717, 100.523186], 18);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-            }
-            
-            // ทำให้ Leaflet วาดแผนที่ใหม่สมบูรณ์เมื่อซ่อนหน้าล็อคอิน
-            setTimeout(() => { map.invalidateSize(); }, 100);
-
-            // ดึงข้อมูลไอเทม
-            document.getElementById('statusText').innerText = "กำลังดึงข้อมูลมอนสเตอร์...";
+            // ดึงข้อมูลไอเทมและคำถาม
             fetch(`${API_URL}?action=getItems`)
                 .then(res => res.json())
                 .then(data => {
-                    itemsList = data;
-                    // วาดมอนสเตอร์ลงบนแผนที่
-                    itemsList.forEach(item => {
-                        const icon = L.icon({
-                            iconUrl: item.iconUrl,
-                            iconSize: [40, 40],
-                            iconAnchor: [20, 40]
-                        });
-                        L.marker([item.lat, item.lng], {icon: icon})
-                         .addTo(map)
-                         .bindPopup(`<b>${item.name}</b><br>ระดับ: ${item.type}`);
-                    });
+                    const scene = document.querySelector('a-scene');
                     
-                    document.getElementById('statusText').innerText = "กำลังค้นหาสัญญาณ GPS...";
-                    startGPS(); 
-                })
-                .catch(err => {
-                    console.error(err);
-                    document.getElementById('statusText').innerText = "เกิดข้อผิดพลาดในการดึงข้อมูล";
+                    data.forEach(item => {
+                        const entity = document.createElement('a-image');
+                        entity.setAttribute('src', item.iconUrl);
+                        entity.setAttribute('gps-entity-place', `latitude: ${item.lat}; longitude: ${item.lng};`);
+                        entity.setAttribute('scale', '10 10 10');
+                        entity.setAttribute('look-at', '[gps-camera]');
+                        entity.classList.add('clickable');
+                        
+                        // 🌟 เมื่อคลิก/แตะที่มอนสเตอร์ ให้เปิดหน้าต่างคำถาม
+                        entity.addEventListener('click', function() {
+                            openQuestionModal(item, entity);
+                        });
+
+                        scene.appendChild(entity);
+                    });
                 });
         }
 
-        // --- ระบบระยะทาง (Haversine Formula) ---
-        function getDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; 
-            const p1 = lat1 * Math.PI/180;
-            const p2 = lat2 * Math.PI/180;
-            const dp = (lat2-lat1) * Math.PI/180;
-            const dl = (lon2-lon1) * Math.PI/180;
-            const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        // --- ระบบจัดการคำถาม ---
+        function openQuestionModal(itemData, entityElement) {
+            // เก็บข้อมูลตัวมอนสเตอร์ที่กำลังสู้อยู่
+            currentTargetEntity = entityElement;
+            currentCorrectAnswer = itemData.answer;
+
+            // ใส่ข้อความลงในหน้าต่าง
+            document.getElementById('qTitle').innerText = `สแกนพบ: ${itemData.name}`;
+            document.getElementById('qText').innerText = itemData.question;
+            document.getElementById('btnChoice1').innerText = itemData.choice1;
+            document.getElementById('btnChoice2').innerText = itemData.choice2;
+            document.getElementById('btnChoice3').innerText = itemData.choice3;
+
+            // แสดงหน้าต่าง
+            document.getElementById('questionModal').classList.remove('hidden');
         }
 
-        // --- ระบบ GPS ---
-        function startGPS() {
-            if ('geolocation' in navigator) {
-                gpsWatchId = navigator.geolocation.watchPosition(
-                    function(position) {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        const accuracy = position.coords.accuracy;
-
-                        document.getElementById('accuracyText').innerText = `ความแม่นยำ GPS: ±${Math.floor(accuracy)} เมตร`;
-
-                        if (!playerMarker) {
-                            playerMarker = L.marker([lat, lng]).addTo(map).bindPopup("คุณอยู่ที่นี่");
-                            circleAccuracy = L.circle([lat, lng], { radius: accuracy, color: '#3b82f6', fillOpacity: 0.2 }).addTo(map);
-                            map.setView([lat, lng], 19);
-                        } else {
-                            playerMarker.setLatLng([lat, lng]);
-                            circleAccuracy.setLatLng([lat, lng]);
-                            circleAccuracy.setRadius(accuracy);
-                        }
-
-                        checkProximity(lat, lng);
-                    },
-                    function(error) {
-                        document.getElementById('statusText').innerText = "กรุณาเปิด GPS (Location Services)";
-                    },
-                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-                );
-            }
+        function closeQuestionModal() {
+            document.getElementById('questionModal').classList.add('hidden');
+            currentTargetEntity = null;
         }
 
-        // --- ตรวจสอบระยะห่างกับไอเทม ---
-        function checkProximity(playerLat, playerLng) {
-            let closestDistance = Infinity;
-            currentTarget = null;
-
-            itemsList.forEach(item => {
-                const distance = getDistance(playerLat, playerLng, item.lat, item.lng);
-                if (distance <= item.radius && distance < closestDistance) {
-                    closestDistance = distance;
-                    currentTarget = item;
+        function checkAnswer(selectedChoice) {
+            if (selectedChoice == currentCorrectAnswer) {
+                // ตอบถูก
+                alert("🎉 ยินดีด้วย! ตอบถูก จับไอเทมได้สำเร็จ");
+                
+                // ลบตัวมอนสเตอร์ออกจากกล้อง AR
+                if (currentTargetEntity && currentTargetEntity.parentNode) {
+                    currentTargetEntity.parentNode.removeChild(currentTargetEntity);
                 }
-            });
-
-            const catchBtn = document.getElementById('catchBtn');
-            const statusText = document.getElementById('statusText');
-
-            if (currentTarget) {
-                statusText.innerHTML = `<span class="text-green-600 font-bold">พบ ${currentTarget.name}! (${Math.floor(closestDistance)} เมตร)</span>`;
-                catchBtn.classList.remove('hidden');
+                
+                // ปิดหน้าต่างคำถาม
+                closeQuestionModal();
+                
+                // (ในอนาคต: สามารถเพิ่มโค้ดยิงคะแนนกลับไปบันทึกที่ Google Sheets ตรงนี้ได้)
             } else {
-                statusText.innerText = `ออกสำรวจเพื่อค้นหาไอเทม (เดินตามแผนที่)`;
-                catchBtn.classList.add('hidden');
-            }
-        }
-
-        // --- เริ่มต้นการจับมอนสเตอร์ ---
-        function startCatchSequence() {
-            if (currentTarget) {
-                // สำหรับพัฒนาต่อ: สร้างหน้าต่างซ้อนขึ้นมาแสดงคำถามตรงนี้
-                alert(`คุณกำลังพยายามจับ: ${currentTarget.name}\n(ระบบคำถามจะเพิ่มในส่วนนี้)`);
+                // ตอบผิด
+                alert("❌ ยังไม่ถูกต้องนะ ลองคิดดูดีๆ อีกครั้ง!");
             }
         }
     </script>
