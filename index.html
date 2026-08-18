@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Sci-Hunter: โหมด AR เปิดกล้อง</title>
+    <title>Sci-Hunter: โหมด AR กล่องปริศนา</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
@@ -14,17 +14,15 @@
         body { margin: 0; overflow: hidden; }
         .ui-layer { z-index: 9999; position: absolute; }
         .pointer-events-auto { pointer-events: auto; }
-        /* พื้นหลังหน้าต่างคำถาม */
         .modal-bg { background-color: rgba(0, 0, 0, 0.8); backdrop-filter: blur(5px); }
     </style>
 </head>
 <body style="margin: 0; overflow: hidden;" class="font-sans text-white">
 
-    <!-- 1. หน้าจอ Login -->
     <div id="loginScreen" class="ui-layer inset-0 bg-gray-900 w-full h-full flex flex-col justify-center items-center px-6">
         <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center pointer-events-auto">
             <h1 class="text-3xl font-bold text-blue-600 mb-2">Sci-Hunter AR</h1>
-            <p class="text-gray-600 mb-6">ภารกิจตามล่าไอเทมวิทยาศาสตร์</p>
+            <p class="text-gray-600 mb-6">ภารกิจตามล่ากล่องปริศนา</p>
             
             <input type="text" id="studentIdInput" placeholder="กรอกรหัสนักเรียน" 
                    class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 text-gray-800 text-center mb-4">
@@ -36,35 +34,33 @@
         </div>
     </div>
 
-    <!-- 2. UI ด้านบน -->
     <div id="gameUI" class="hidden ui-layer top-4 left-0 w-full px-4 flex justify-between items-start pointer-events-none">
         <div class="bg-white/90 text-gray-800 p-3 rounded-xl shadow-lg w-full border-l-4 border-blue-500 pointer-events-auto">
             <h1 class="font-bold text-lg">นักวิจัย: <span id="playerNameDisplay" class="text-blue-600"></span></h1>
-            <p id="statusText" class="text-sm text-gray-600 mt-1">หันกล้องหาไอเทม แล้วแตะที่รูปเพื่อจับ!</p>
+            <p id="statusText" class="text-sm text-gray-600 mt-1">หันกล้องหา "กล่องปริศนา" แล้วแตะเพื่อเปิด!</p>
         </div>
     </div>
 
-    <!-- 🌟 3. หน้าต่างคำถาม (Pop-up Modal) 🌟 -->
     <div id="questionModal" class="hidden ui-layer inset-0 modal-bg w-full h-full flex flex-col justify-center items-center px-4 pointer-events-auto">
-        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md text-center border-t-8 border-indigo-500">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md text-center border-t-8 border-indigo-500 relative">
             <h2 id="qTitle" class="text-2xl font-bold text-indigo-600 mb-2">พบไอเทม!</h2>
+            
+            <img id="qItemIcon" src="" crossorigin="anonymous" class="w-24 h-24 mx-auto mb-4 drop-shadow-lg animate-bounce object-contain">
+            
             <p id="qText" class="text-gray-700 text-lg mb-6 font-medium">คำถามจะปรากฏที่นี่?</p>
             
-            <!-- ปุ่มตัวเลือก 3 ข้อ -->
             <div class="space-y-3">
                 <button onclick="checkAnswer(1)" id="btnChoice1" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 border border-blue-300 rounded-xl transition"></button>
                 <button onclick="checkAnswer(2)" id="btnChoice2" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 border border-blue-300 rounded-xl transition"></button>
                 <button onclick="checkAnswer(3)" id="btnChoice3" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 border border-blue-300 rounded-xl transition"></button>
             </div>
             
-            <!-- ปุ่มปิดหน้าต่าง (กรณีไม่อยากตอบ) -->
             <button onclick="closeQuestionModal()" class="mt-6 text-gray-400 hover:text-gray-600 underline text-sm">
                 หนีไปตั้งหลักก่อน
             </button>
         </div>
     </div>
 
-    <!-- 4. ระบบกล้อง AR -->
     <div id="ar-container" style="display: none;">
         <a-scene
             vr-mode-ui="enabled: false"
@@ -80,11 +76,8 @@
     </div>
 
     <script>
-        // ==========================================
-        const API_URL = "https://script.google.com/macros/s/AKfycbwuvzSAwabFi8DlT_MFzAq0rrWT_dMAOCEbJSJB_OsfZPqn9IL1L6Zy2E1JNjkIh9rxkg/exec"; // 🔴 เปลี่ยนลิงก์ API ด้วยนะครับ
-        // ==========================================
+        const API_URL = "https://script.google.com/macros/s/AKfycbwuvzSAwabFi8DlT_MFzAq0rrWT_dMAOCEbJSJB_OsfZPqn9IL1L6Zy2E1JNjkIh9rxkg/exec"; 
 
-        // ตัวแปรเก็บข้อมูลคำถามปัจจุบัน
         let currentTargetEntity = null;
         let currentCorrectAnswer = null;
 
@@ -132,27 +125,36 @@
             document.getElementById('ar-container').style.display = 'block';
             document.getElementById('playerNameDisplay').innerText = playerName;
 
-            // ดึงข้อมูลไอเทมและคำถาม
             fetch(`${API_URL}?action=getItems`)
                 .then(res => res.json())
                 .then(data => {
                     const scene = document.querySelector('a-scene');
                     
-                    data.forEach(item => {
+                    // 🌟 1. แยกเก็บ "พิกัด (Locations)" เอาไว้ไม่ให้ขยับ
+                    const locations = data.map(d => ({ lat: d.lat, lng: d.lng }));
+                    
+                    // 🌟 2. สับไพ่ "ข้อมูลไอเทม (Items)" ให้เรียงแบบสุ่ม (Shuffle)
+                    const shuffledItems = [...data].sort(() => Math.random() - 0.5);
+                    
+                    // 🌟 3. วนลูปสร้างกล่องตามจำนวนพิกัด
+                    locations.forEach((loc, index) => {
+                        const randomItem = shuffledItems[index]; // หยิบไอเทมที่สุ่มแล้วมาใส่กล่อง
+                        
                         const entity = document.createElement('a-image');
                         
-                        // ใส่ลิงก์รูปกล่องปริศนา (ผมเตรียมรูปกล่องสมบัติสวยๆ ไว้ให้เป็นตัวอย่างครับ)
-                        const pandoraBoxUrl = 'https://cdn-icons-png.flaticon.com/512/4129/4129437.png'; 
+                        // 🟢 อ้างอิงรูปกล่องปริศนาจากใน GitHub ของเราเอง (ป้องกันการโดนบล็อก CORS)
+                        // รบกวนคุณครูอัปโหลดรูปชื่อ box.png ไว้ใน GitHub ด้วยนะครับ
+                        entity.setAttribute('src', 'box.png'); 
                         
-                        entity.setAttribute('src', pandoraBoxUrl); // <--- บังคับให้โชว์รูปกล่องแทน
-                        entity.setAttribute('gps-entity-place', `latitude: ${item.lat}; longitude: ${item.lng};`);
+                        entity.setAttribute('gps-entity-place', `latitude: ${loc.lat}; longitude: ${loc.lng};`);
                         entity.setAttribute('scale', '10 10 10');
                         entity.setAttribute('look-at', '[gps-camera]');
                         entity.classList.add('clickable');
                         
-                        // 🌟 เมื่อคลิก/แตะที่มอนสเตอร์ ให้เปิดหน้าต่างคำถาม
+                        // เมื่อคลิกที่กล่องปริศนา
                         entity.addEventListener('click', function() {
-                            openQuestionModal(item, entity);
+                            // ส่งข้อมูลไอเทมที่ถูกสุ่มไว้ ไปเปิดแสดงผล
+                            openQuestionModal(randomItem, entity);
                         });
 
                         scene.appendChild(entity);
@@ -160,20 +162,20 @@
                 });
         }
 
-        // --- ระบบจัดการคำถาม ---
         function openQuestionModal(itemData, entityElement) {
-            // เก็บข้อมูลตัวมอนสเตอร์ที่กำลังสู้อยู่
             currentTargetEntity = entityElement;
             currentCorrectAnswer = itemData.answer;
 
-            // ใส่ข้อความลงในหน้าต่าง
-            document.getElementById('qTitle').innerText = `สแกนพบ: ${itemData.name}`;
+            document.getElementById('qTitle').innerText = `เปิดกล่องพบ: ${itemData.name}`;
+            
+            // 🟢 ให้รูปไอเทมของจริง โผล่ขึ้นมาตอนกล่องแตก
+            document.getElementById('qItemIcon').src = itemData.iconUrl; 
+            
             document.getElementById('qText').innerText = itemData.question;
             document.getElementById('btnChoice1').innerText = itemData.choice1;
             document.getElementById('btnChoice2').innerText = itemData.choice2;
             document.getElementById('btnChoice3').innerText = itemData.choice3;
 
-            // แสดงหน้าต่าง
             document.getElementById('questionModal').classList.remove('hidden');
         }
 
@@ -184,20 +186,12 @@
 
         function checkAnswer(selectedChoice) {
             if (selectedChoice == currentCorrectAnswer) {
-                // ตอบถูก
                 alert("🎉 ยินดีด้วย! ตอบถูก จับไอเทมได้สำเร็จ");
-                
-                // ลบตัวมอนสเตอร์ออกจากกล้อง AR
                 if (currentTargetEntity && currentTargetEntity.parentNode) {
                     currentTargetEntity.parentNode.removeChild(currentTargetEntity);
                 }
-                
-                // ปิดหน้าต่างคำถาม
                 closeQuestionModal();
-                
-                // (ในอนาคต: สามารถเพิ่มโค้ดยิงคะแนนกลับไปบันทึกที่ Google Sheets ตรงนี้ได้)
             } else {
-                // ตอบผิด
                 alert("❌ ยังไม่ถูกต้องนะ ลองคิดดูดีๆ อีกครั้ง!");
             }
         }
