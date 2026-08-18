@@ -69,6 +69,10 @@
             cursor="rayOrigin: mouse"
             raycaster="objects: .clickable">
             
+            <a-assets>
+                <img id="mysteryBoxImg" src="https://cdn-icons-png.flaticon.com/512/4129/4129437.png" crossorigin="anonymous">
+            </a-assets>
+
             <a-camera gps-camera rotation-reader>
                 <a-cursor color="#3b82f6" scale="1.5 1.5 1.5"></a-cursor>
             </a-camera>
@@ -76,7 +80,10 @@
     </div>
 
     <script>
+        // ==========================================
+        // 🔴 วาง URL ของ Google Apps Script ที่นี่ครับ
         const API_URL = "https://script.google.com/macros/s/AKfycbwuvzSAwabFi8DlT_MFzAq0rrWT_dMAOCEbJSJB_OsfZPqn9IL1L6Zy2E1JNjkIh9rxkg/exec"; 
+        // ==========================================
 
         let currentTargetEntity = null;
         let currentCorrectAnswer = null;
@@ -130,31 +137,43 @@
                 .then(data => {
                     const scene = document.querySelector('a-scene');
                     
-                    // 🌟 1. แยกเก็บ "พิกัด (Locations)" เอาไว้ไม่ให้ขยับ
+                    // ระบบสุ่มไอเทมใส่กล่อง (Shuffle)
                     const locations = data.map(d => ({ lat: d.lat, lng: d.lng }));
-                    
-                    // 🌟 2. สับไพ่ "ข้อมูลไอเทม (Items)" ให้เรียงแบบสุ่ม (Shuffle)
                     const shuffledItems = [...data].sort(() => Math.random() - 0.5);
                     
-                    // 🌟 3. วนลูปสร้างกล่องตามจำนวนพิกัด
                     locations.forEach((loc, index) => {
-                        const randomItem = shuffledItems[index]; // หยิบไอเทมที่สุ่มแล้วมาใส่กล่อง
+                        const randomItem = shuffledItems[index]; 
                         
                         const entity = document.createElement('a-image');
                         
-                        // 🟢 อ้างอิงรูปกล่องปริศนาจากใน GitHub ของเราเอง (ป้องกันการโดนบล็อก CORS)
-                        // รบกวนคุณครูอัปโหลดรูปชื่อ box.png ไว้ใน GitHub ด้วยนะครับ
-                        entity.setAttribute('src', 'box.png'); 
+                        // 1. ตอนแรกให้แสดงเป็นรูปกล่องปริศนา (ดึงจาก a-assets ที่โหลดไว้)
+                        entity.setAttribute('src', '#mysteryBoxImg'); 
                         
                         entity.setAttribute('gps-entity-place', `latitude: ${loc.lat}; longitude: ${loc.lng};`);
                         entity.setAttribute('scale', '10 10 10');
                         entity.setAttribute('look-at', '[gps-camera]');
                         entity.classList.add('clickable');
                         
-                        // เมื่อคลิกที่กล่องปริศนา
+                        // ตัวแปรกันไม่ให้เด็กกดกล่องรัวๆ
+                        let isOpened = false;
+
+                        // 🌟 2. เหตุการณ์เมื่อนักเรียน "กดที่กล่อง"
                         entity.addEventListener('click', function() {
-                            // ส่งข้อมูลไอเทมที่ถูกสุ่มไว้ ไปเปิดแสดงผล
-                            openQuestionModal(randomItem, entity);
+                            if (isOpened) return; 
+                            isOpened = true; // ล็อกกล่องไว้ว่าเปิดแล้ว
+
+                            // สเตปที่ 1: เปลี่ยนรูปจาก "กล่อง" เป็นรูป "ไอเทมของจริง" ให้ลอยอยู่ในกล้อง
+                            entity.setAttribute('src', randomItem.iconUrl);
+                            
+                            // ขยายขนาดไอเทมให้ใหญ่ขึ้นนิดนึงตอนเด้งออกมา
+                            entity.setAttribute('scale', '15 15 15');
+                            document.getElementById('statusText').innerText = `กล่องเปิดแล้ว! เจอ ${randomItem.name}...`;
+
+                            // สเตปที่ 2: หน่วงเวลา 1.5 วินาที เพื่อให้ลุ้น แล้วค่อยเปิดหน้าต่างคำถาม!
+                            setTimeout(() => {
+                                openQuestionModal(randomItem, entity);
+                                document.getElementById('statusText').innerText = "ตอบคำถามเพื่อรับไอเทม!";
+                            }, 1500); 
                         });
 
                         scene.appendChild(entity);
@@ -166,9 +185,9 @@
             currentTargetEntity = entityElement;
             currentCorrectAnswer = itemData.answer;
 
-            document.getElementById('qTitle').innerText = `เปิดกล่องพบ: ${itemData.name}`;
+            document.getElementById('qTitle').innerText = `ค้นพบ: ${itemData.name}`;
             
-            // 🟢 ให้รูปไอเทมของจริง โผล่ขึ้นมาตอนกล่องแตก
+            // ให้รูปไอเทมของจริง โผล่ขึ้นมาในหน้าต่าง
             document.getElementById('qItemIcon').src = itemData.iconUrl; 
             
             document.getElementById('qText').innerText = itemData.question;
@@ -187,10 +206,13 @@
         function checkAnswer(selectedChoice) {
             if (selectedChoice == currentCorrectAnswer) {
                 alert("🎉 ยินดีด้วย! ตอบถูก จับไอเทมได้สำเร็จ");
+                
+                // ถอดมอนสเตอร์ออกจากจอเมื่อจับสำเร็จ
                 if (currentTargetEntity && currentTargetEntity.parentNode) {
                     currentTargetEntity.parentNode.removeChild(currentTargetEntity);
                 }
                 closeQuestionModal();
+                document.getElementById('statusText').innerText = "หันกล้องหา "กล่องปริศนา" แล้วแตะเพื่อเปิด!";
             } else {
                 alert("❌ ยังไม่ถูกต้องนะ ลองคิดดูดีๆ อีกครั้ง!");
             }
