@@ -140,7 +140,11 @@
                     
                     data.forEach(item => {
                         const entity = document.createElement('a-image');
-                        entity.setAttribute('src', item.iconUrl);
+                        
+                        // ใส่ลิงก์รูปกล่องปริศนา (ผมเตรียมรูปกล่องสมบัติสวยๆ ไว้ให้เป็นตัวอย่างครับ)
+                        const pandoraBoxUrl = 'https://cdn-icons-png.flaticon.com/512/4129/4129437.png'; 
+                        
+                        entity.setAttribute('src', pandoraBoxUrl); // <--- บังคับให้โชว์รูปกล่องแทน
                         entity.setAttribute('gps-entity-place', `latitude: ${item.lat}; longitude: ${item.lng};`);
                         entity.setAttribute('scale', '10 10 10');
                         entity.setAttribute('look-at', '[gps-camera]');
