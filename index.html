@@ -19,21 +19,28 @@
 </head>
 <body style="margin: 0; overflow: hidden;" class="font-sans text-white">
 
+    <!-- 1. หน้าจอ Login (อัปเดตใหม่ มีช่องกรอกชื่อและรหัส) -->
     <div id="loginScreen" class="ui-layer inset-0 bg-gray-900 w-full h-full flex flex-col justify-center items-center px-6">
         <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center pointer-events-auto">
             <h1 class="text-3xl font-bold text-blue-600 mb-2">Sci-Hunter AR</h1>
             <p class="text-gray-600 mb-6">ภารกิจตามล่ากล่องปริศนา</p>
             
+            <!-- ช่องกรอกชื่อ-นามสกุล -->
+            <input type="text" id="studentNameInput" placeholder="กรอกชื่อ-นามสกุล" 
+                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 text-gray-800 text-center mb-3">
+
+            <!-- ช่องกรอกรหัสนักเรียน -->
             <input type="text" id="studentIdInput" placeholder="กรอกรหัสนักเรียน" 
-                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 text-gray-800 text-center mb-4">
+                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 text-gray-800 text-center mb-5">
                    
-            <button id="loginBtn" onclick="loginUser()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">
+            <button id="loginBtn" onclick="loginUser()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition shadow-lg">
                 เข้าสู่ระบบ / เปิดกล้อง
             </button>
             <p id="loginError" class="text-red-500 mt-3 text-sm hidden"></p>
         </div>
     </div>
 
+    <!-- 2. UI ด้านบน -->
     <div id="gameUI" class="hidden ui-layer top-4 left-0 w-full px-4 flex justify-between items-start pointer-events-none">
         <div class="bg-white/90 text-gray-800 p-3 rounded-xl shadow-lg w-full border-l-4 border-blue-500 pointer-events-auto">
             <h1 class="font-bold text-lg">นักวิจัย: <span id="playerNameDisplay" class="text-blue-600"></span></h1>
@@ -41,10 +48,12 @@
         </div>
     </div>
 
+    <!-- 🌟 3. หน้าต่างคำถาม (Pop-up Modal) 🌟 -->
     <div id="questionModal" class="hidden ui-layer inset-0 modal-bg w-full h-full flex flex-col justify-center items-center px-4 pointer-events-auto">
         <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md text-center border-t-8 border-indigo-500 relative">
             <h2 id="qTitle" class="text-2xl font-bold text-indigo-600 mb-2">พบไอเทม!</h2>
             
+            <!-- รูปไอเทมเฉลย -->
             <img id="qItemIcon" src="" crossorigin="anonymous" class="w-24 h-24 mx-auto mb-4 drop-shadow-lg animate-bounce object-contain">
             
             <p id="qText" class="text-gray-700 text-lg mb-6 font-medium">คำถามจะปรากฏที่นี่?</p>
@@ -61,6 +70,7 @@
         </div>
     </div>
 
+    <!-- 4. ระบบกล้อง AR -->
     <div id="ar-container" style="display: none;">
         <a-scene
             vr-mode-ui="enabled: false"
@@ -69,6 +79,7 @@
             cursor="rayOrigin: mouse"
             raycaster="objects: .clickable">
             
+            <!-- โหลดรูปกล่องปริศนาเตรียมไว้ล่วงหน้า -->
             <a-assets>
                 <img id="mysteryBoxImg" src="https://cdn-icons-png.flaticon.com/512/4129/4129437.png" crossorigin="anonymous">
             </a-assets>
@@ -88,53 +99,51 @@
         let currentTargetEntity = null;
         let currentCorrectAnswer = null;
 
+        // เช็คว่าเคยล็อกอินไว้แล้วหรือยัง (เผื่อเด็กรีเฟรชหน้าเว็บ จะได้ไม่ต้องพิมพ์ใหม่)
+        window.onload = () => {
+            const savedName = localStorage.getItem("sciHunter_studentName");
+            if (savedName) {
+                startGame(savedName);
+            }
+        };
+
         function loginUser() {
+            const studentName = document.getElementById('studentNameInput').value.trim();
             const studentId = document.getElementById('studentIdInput').value.trim();
             const errorText = document.getElementById('loginError');
-            const loginBtn = document.getElementById('loginBtn');
             
-            if (!studentId) {
-                showError("กรุณากรอกรหัสนักเรียน");
+            // เช็คว่ากรอกข้อมูลครบทั้ง 2 ช่องหรือไม่
+            if (!studentName || !studentId) {
+                errorText.innerText = "กรุณากรอกชื่อและรหัสนักเรียนให้ครบถ้วน!";
+                errorText.classList.remove('hidden');
                 return;
             }
 
             errorText.classList.add('hidden');
-            loginBtn.innerText = "กำลังเชื่อมต่อ...";
-            loginBtn.disabled = true;
             
-            fetch(`${API_URL}?action=login&id=${studentId}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        startGame(data.name);
-                    } else {
-                        showError(data.message);
-                        loginBtn.innerText = "เข้าสู่ระบบ / เปิดกล้อง";
-                        loginBtn.disabled = false;
-                    }
-                })
-                .catch(err => {
-                    showError("เกิดข้อผิดพลาดในการเชื่อมต่อ");
-                    loginBtn.innerText = "เข้าสู่ระบบ / เปิดกล้อง";
-                    loginBtn.disabled = false;
-                });
-        }
+            // บันทึกชื่อและรหัสลงในเครื่องมือถือของเด็ก
+            localStorage.setItem("sciHunter_studentName", studentName);
+            localStorage.setItem("sciHunter_studentId", studentId);
 
-        function showError(msg) {
-            const errorText = document.getElementById('loginError');
-            errorText.innerText = msg;
-            errorText.classList.remove('hidden');
+            // นำชื่อเข้าสู่เกมได้เลยทันที
+            startGame(studentName);
         }
 
         function startGame(playerName) {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('gameUI').classList.remove('hidden');
             document.getElementById('ar-container').style.display = 'block';
+            
+            // แสดงชื่อผู้เล่นที่มุมซ้ายบน
             document.getElementById('playerNameDisplay').innerText = playerName;
 
+            document.getElementById('statusText').innerText = "กำลังสร้างกล่องปริศนา...";
+
+            // ดึงข้อมูลไอเทมเพื่อมาสร้างกล่อง
             fetch(`${API_URL}?action=getItems`)
                 .then(res => res.json())
                 .then(data => {
+                    document.getElementById('statusText').innerText = "หันกล้องหา \"กล่องปริศนา\" แล้วแตะเพื่อเปิด!";
                     const scene = document.querySelector('a-scene');
                     
                     // ระบบสุ่มไอเทมใส่กล่อง (Shuffle)
@@ -145,31 +154,24 @@
                         const randomItem = shuffledItems[index]; 
                         
                         const entity = document.createElement('a-image');
-                        
-                        // 1. ตอนแรกให้แสดงเป็นรูปกล่องปริศนา (ดึงจาก a-assets ที่โหลดไว้)
                         entity.setAttribute('src', '#mysteryBoxImg'); 
-                        
                         entity.setAttribute('gps-entity-place', `latitude: ${loc.lat}; longitude: ${loc.lng};`);
                         entity.setAttribute('scale', '10 10 10');
                         entity.setAttribute('look-at', '[gps-camera]');
                         entity.classList.add('clickable');
                         
-                        // ตัวแปรกันไม่ให้เด็กกดกล่องรัวๆ
                         let isOpened = false;
 
-                        // 🌟 2. เหตุการณ์เมื่อนักเรียน "กดที่กล่อง"
                         entity.addEventListener('click', function() {
                             if (isOpened) return; 
-                            isOpened = true; // ล็อกกล่องไว้ว่าเปิดแล้ว
+                            isOpened = true; 
 
-                            // สเตปที่ 1: เปลี่ยนรูปจาก "กล่อง" เป็นรูป "ไอเทมของจริง" ให้ลอยอยู่ในกล้อง
+                            // เปลี่ยนรูปจาก "กล่อง" เป็น "ไอเทมของจริง"
                             entity.setAttribute('src', randomItem.iconUrl);
-                            
-                            // ขยายขนาดไอเทมให้ใหญ่ขึ้นนิดนึงตอนเด้งออกมา
                             entity.setAttribute('scale', '15 15 15');
                             document.getElementById('statusText').innerText = `กล่องเปิดแล้ว! เจอ ${randomItem.name}...`;
 
-                            // สเตปที่ 2: หน่วงเวลา 1.5 วินาที เพื่อให้ลุ้น แล้วค่อยเปิดหน้าต่างคำถาม!
+                            // หน่วงเวลา 1.5 วินาที แล้วเปิดคำถาม
                             setTimeout(() => {
                                 openQuestionModal(randomItem, entity);
                                 document.getElementById('statusText').innerText = "ตอบคำถามเพื่อรับไอเทม!";
@@ -178,6 +180,9 @@
 
                         scene.appendChild(entity);
                     });
+                })
+                .catch(err => {
+                    document.getElementById('statusText').innerText = "เกิดข้อผิดพลาดในการโหลดข้อมูลกล่อง";
                 });
         }
 
@@ -186,10 +191,7 @@
             currentCorrectAnswer = itemData.answer;
 
             document.getElementById('qTitle').innerText = `ค้นพบ: ${itemData.name}`;
-            
-            // ให้รูปไอเทมของจริง โผล่ขึ้นมาในหน้าต่าง
             document.getElementById('qItemIcon').src = itemData.iconUrl; 
-            
             document.getElementById('qText').innerText = itemData.question;
             document.getElementById('btnChoice1').innerText = itemData.choice1;
             document.getElementById('btnChoice2').innerText = itemData.choice2;
@@ -207,12 +209,12 @@
             if (selectedChoice == currentCorrectAnswer) {
                 alert("🎉 ยินดีด้วย! ตอบถูก จับไอเทมได้สำเร็จ");
                 
-                // ถอดมอนสเตอร์ออกจากจอเมื่อจับสำเร็จ
+                // ถอดกล่องออกจากจอเมื่อจับสำเร็จ
                 if (currentTargetEntity && currentTargetEntity.parentNode) {
                     currentTargetEntity.parentNode.removeChild(currentTargetEntity);
                 }
                 closeQuestionModal();
-                document.getElementById('statusText').innerText = "หันกล้องหา "กล่องปริศนา" แล้วแตะเพื่อเปิด!";
+                document.getElementById('statusText').innerText = "หันกล้องหา \"กล่องปริศนา\" แล้วแตะเพื่อเปิด!";
             } else {
                 alert("❌ ยังไม่ถูกต้องนะ ลองคิดดูดีๆ อีกครั้ง!");
             }
